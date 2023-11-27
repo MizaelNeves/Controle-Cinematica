@@ -11,16 +11,18 @@ AccelStepper motor3(1, 4, 7);
 #define limitSwitchY 10 // Sensor junta 2
 #define limitSwitchZ 11 // Sensor junta 3
 
-// Variáveis para os ângulos das juntas
-float theta1 = 0;             // Ângulo da junta 1
-float limiteTheta1 = 121;     // Ângulo limite da junta 1
-float limiteMinTheta1 = -141; // Ângulo limite mínimo da junta 1
-float theta2 = 0;             // Ângulo da junta 2
-float limiteTheta2 = 181;     // Ângulo limite da junta 2
-float limiteMinTheta2 = -1;   // Ângulo limite mínimo da junta 2
-float theta3 = 0;             // Ângulo da junta 3
-float limiteTheta3 = 91;      // Ângulo limite da junta 3
-float limiteMinTheta3 = -91;  // Ângulo limite mínimo da junta 3
+// Variáveis para os ângulos das juntas e seus respectivos limites
+float theta1 = 0; // Ângulo da junta 1
+float limiteTheta1 = 120;
+float limiteMinTheta1 = -140;
+
+float theta2 = 0; // Ângulo da junta 2
+float limiteTheta2 = 180;
+float limiteMinTheta2 = 0;
+
+float theta3 = 0; // Ângulo da junta 3
+float limiteTheta3 = 90;
+float limiteMinTheta3 = -90;
 
 // Variáveis para coordenadas
 float X = 0; // Posição em X
@@ -41,6 +43,7 @@ float reducaoMotor3 = (45.00 / 8.00);            // 45:8
 
 String comando;
 
+// Função para configurar inicialização
 void setup()
 {
     pinMode(limitSwitchX, INPUT_PULLUP);
@@ -48,12 +51,7 @@ void setup()
     pinMode(limitSwitchZ, INPUT_PULLUP);
 
     // Inicialize os motores de passo com velocidade máxima e aceleração
-    motor1.setMaxSpeed(4000);
-    motor1.setAcceleration(2000);
-    motor2.setMaxSpeed(4000);
-    motor2.setAcceleration(2000);
-    motor3.setMaxSpeed(1000);
-    motor3.setAcceleration(500);
+    configurarMotores();
 
     // Inicialize a comunicação serial
     Serial.begin(115200);
@@ -62,6 +60,7 @@ void setup()
     homing();
 }
 
+// Função principal do programa
 void loop()
 {
     if (Serial.available() > 0)
@@ -96,56 +95,46 @@ void loop()
     }
 }
 
+// Função para configurar os motores de passo
+void configurarMotores()
+{
+    motor1.setMaxSpeed(4000);
+    motor1.setAcceleration(2000);
+    motor2.setMaxSpeed(4000);
+    motor2.setAcceleration(2000);
+    motor3.setMaxSpeed(1000);
+    motor3.setAcceleration(500);
+}
+
+// Função para realizar o procedimento de homing
 void homing()
 {
-    // Homing Stepper1
-    while (digitalRead(limitSwitchX) == 1)
-    {
-        motor1.setSpeed(-2000);
-        motor1.runSpeed();
-        motor1.setCurrentPosition(-21000); // When limit switch pressed set position to 0 steps
-    }
-    delay(20);
-
-    motor1.moveTo(0);
-    while (motor1.currentPosition() != 0)
-    {
-        motor1.run();
-    }
-
-    // Homing Stepper2
-    while (digitalRead(limitSwitchY) == 1)
-    {
-        motor2.setSpeed(-2000);
-        motor2.runSpeed();
-        motor2.setCurrentPosition(-1100); // When limit switch pressed set position to -5440 steps
-    }
-    delay(20);
-
-    motor2.moveTo(0);
-    while (motor2.currentPosition() != 0)
-    {
-        motor2.run();
-    }
-
-    // Homing Stepper3
-    while (digitalRead(limitSwitchZ) == 1)
-    {
-        motor3.setSpeed(1000);
-        motor3.runSpeed();
-        motor3.setCurrentPosition(3412.5); // When limit switch pressed set position to 0 steps
-    }
-    delay(20);
-
-    motor3.moveTo(0);
-    while (motor3.currentPosition() != 0)
-    {
-        motor3.run();
-    }
+    homingStepper(&motor1, limitSwitchX, -21000);
+    homingStepper(&motor2, limitSwitchY, -1100);
+    homingStepper(&motor3, limitSwitchZ, 3412.5);
 
     cinematicaDireta(0, 0, 0);
 }
 
+// Função para realizar homing em um motor de passo
+void homingStepper(AccelStepper *motor, int limitSwitch, long homePosition)
+{
+    while (digitalRead(limitSwitch) == 1)
+    {
+        motor->setSpeed(-2000);
+        motor->runSpeed();
+        motor->setCurrentPosition(homePosition);
+    }
+    delay(20);
+
+    motor->moveTo(0);
+    while (motor->currentPosition() != 0)
+    {
+        motor->run();
+    }
+}
+
+// Função para processar comando de movimento absoluto
 void processarComandoD(String comando)
 {
     if (comando.indexOf("T1:") != -1 && comando.indexOf("T2:") != -1 && comando.indexOf("T3:") != -1)
@@ -171,8 +160,7 @@ void processarComandoD(String comando)
 // Função para calcular a cinemática direta e atualizar as posições dos motores de passo
 void cinematicaDireta(float t1, float t2, float t3)
 {
-    // Converte os ângulos para o número de passos
-    long passosTheta1 = t1 * revolucaoMotor * reducaoMotor1; // Supondo passosPorGrau como o número de passos para 1 grau
+    long passosTheta1 = t1 * revolucaoMotor * reducaoMotor1;
     long passosTheta2 = t2 * revolucaoMotor * reducaoMotor2;
     long passosTheta3 = t3 * revolucaoMotor * reducaoMotor3;
 
@@ -180,7 +168,6 @@ void cinematicaDireta(float t1, float t2, float t3)
     t2 = radians(t2);
     t3 = radians(t3);
 
-    // Calcula as coordenadas X, Y e Z do efetuador com base nos ângulos das juntas
     float X = cos(t1) * (L2 * cos(t2) + L3 * cos(t2 + t3));
     float Y = sin(t1) * (L2 * cos(t2) + L3 * cos(t2 + t3));
     float Z = d1 + L2 * sin(t2) + L3 * sin(t2 + t3);
@@ -195,6 +182,7 @@ void cinematicaDireta(float t1, float t2, float t3)
     movimentaMotor(passosTheta1, passosTheta2, passosTheta3);
 }
 
+// Função para processar comando de movimento relativo
 void processarComandoI(String comando)
 {
     if (comando.indexOf("X") != -1 && comando.indexOf("Y") != -1 && comando.indexOf("Z") != -1)
@@ -256,13 +244,14 @@ void cinematicaInversa(float X, float Y, float Z)
     Serial.println(Z);
 
     // Converte os ângulos para o número de passos
-    long passosTheta1 = theta1 * revolucaoMotor * reducaoMotor1; // Supondo passosPorGrau como o número de passos para 1 grau
+    long passosTheta1 = theta1 * revolucaoMotor * reducaoMotor1;
     long passosTheta2 = theta2 * revolucaoMotor * reducaoMotor2;
     long passosTheta3 = theta3 * revolucaoMotor * reducaoMotor3;
 
     movimentaMotor(passosTheta1, passosTheta2, passosTheta3);
 }
 
+// Função para processar simulação automática
 void processarSimulacaoAutomatica()
 {
     int posicao = 1;
@@ -276,6 +265,7 @@ void processarSimulacaoAutomatica()
     Serial.println("Simulação Automática encerrada.");
 }
 
+// Função para processar simulação manual
 void processarSimulacaoManual()
 {
     cinematicaInversa(291.50, 0.00, 291.00);
@@ -289,9 +279,8 @@ void processarSimulacaoManual()
     {
         if (Serial.available() > 0)
         {
-
-            String comandoManual = Serial.readStringUntil('\n'); // Lê a string até encontrar uma quebra de linha
-            char tipoComando = comandoManual.charAt(0);          // Obtém o primeiro caractere para determinar o tipo de comando
+            String comandoManual = Serial.readStringUntil('\n');
+            char tipoComando = comandoManual.charAt(0);
 
             switch (tipoComando)
             {
@@ -311,6 +300,7 @@ void processarSimulacaoManual()
     Serial.println("Simulação Manual encerrada.");
 }
 
+// Função para realizar simulação de posição
 bool simulacao(int posicao)
 {
     switch (posicao)
@@ -363,6 +353,7 @@ bool simulacao(int posicao)
     }
 }
 
+// Função para validar os ângulos
 bool validaAngulos(float anguloT1, float anguloT2, float anguloT3)
 {
     return (anguloT1 >= limiteMinTheta1 && anguloT1 <= limiteTheta1) &&
@@ -370,9 +361,9 @@ bool validaAngulos(float anguloT1, float anguloT2, float anguloT3)
            (anguloT3 >= limiteMinTheta3 && anguloT3 <= limiteTheta3);
 }
 
+// Função para movimentar os motores de passo
 void movimentaMotor(long passosTheta1, long passosTheta2, long passosTheta3)
 {
-    // Atualiza as posições finais dos motores de passo
     motor1.moveTo(passosTheta1);
     motor2.moveTo(passosTheta2);
     motor3.moveTo(passosTheta3);
@@ -385,8 +376,7 @@ void movimentaMotor(long passosTheta1, long passosTheta2, long passosTheta3)
     }
 }
 
-// Verifica o quadrante e retorna o ângulo a ser incrementado
-// Considera o quandrante da posição (onde deveria estar) e o quadrando em que o ângulo está.
+// Função para verificar o quadrante e ajustar o ângulo incremental
 void AnguloIncrementalTheta1()
 {
     float LT = L2 + L3;
@@ -418,6 +408,7 @@ void AnguloIncrementalTheta1()
     }
 }
 
+// Função para ajustar o ângulo incremental de Theta2
 void anguloIncrementalTheta2()
 {
     if (theta3 == 90 && theta2 >= -91.00 && theta2 <= -89.00 && X < 0)
@@ -437,6 +428,7 @@ void anguloIncrementalTheta2()
     }
 }
 
+// Função para ajustar o ângulo incremental de Theta3
 void anguloIncrementalTheta3()
 {
     if (theta3 <= 91.00 && theta3 >= 89.00 && Z < 291)
